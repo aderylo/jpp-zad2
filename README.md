@@ -1,4 +1,4 @@
-# jpp-zad2
+# JPP Zadanie 2
 
 Zadanie: 
 1. Deklaracja języka do implementacji – do czwartku 6 kwietnia 2023.
@@ -26,10 +26,18 @@ W odpowiedzi na deklarację języka sprawdzający potwierdzi (lub nie :) maksyma
 można uzyskać za poprawne zrealizowanie takiego języka. Ostateczny zakres projektu może
 jednak jeszcze zostać zmieniony w porozumieniu ze sprawdzającym.
 
+---
 
 ## Opis języka 
 
+Bez specjalnych udziwnień oraz ze szczególną uwagą na ułatwienie sobie życia na MRJP,  język składnią będzie łudząco przypomniał Latte. (https://www.mimuw.edu.pl/~ben/Zajecia/Mrj2012/Latte/) Z tego też powodu, część przykładów jest luźno zapożyczona z testów kompilatora Latte udostępnionych pod wyżej podanym linkiem.
 
+Z mniej oczywistych spraw, uważam, że jakąś wartość ma zaimplementowanie obiektowości, głównie ze względu na jej powszechność w świecie języków programowania. Tutaj, gdy mowie o obiektowości mam na myśli istnienie klas, a nie prototypów, chociaż to może się zmienić w trakcie implementacji i przy zbliżającej się perspektywie spędzenia majówki w namiocie z laptopem. 
+
+Mój obecny zamysł, jeżeli chodzi o klasy, jest taki, aby miały atrybuty, metody oraz wstępnie pozwalały na dziedziczenie, ale bez nadpisywania. 
+Niemniej, jednak jeśli czas na to pozwoli, mam zamiar implementacji bardziej normalnego i użytecznego dziedziczenia z możliwością nadpisywania metod.
+
+Co więcej, język nie będzie czysto object-oriented, ponieważ zamierzam najpierw zaimplementować typy prymitywne (int, string, bool, void) a dopiero po zrealizowaniu podstaw dopisywać obiektowość. Dlatego też mimo pójścia w stronę OOP nie wszystko będzie obiektem. 
 
 
 ## Tabelka cech
