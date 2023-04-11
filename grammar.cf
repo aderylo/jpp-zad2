@@ -48,6 +48,9 @@ While.     Stmt ::= "while" "(" Expr ")" Stmt ;
 
 SExp.      Stmt ::= Expr  ";" ;
 
+Jump.      Stmt ::= continue ; | break ;
+  
+
 -- Types ---------------------------------------------------
 
 Int.       Type ::= "int" ;
