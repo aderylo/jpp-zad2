@@ -48,8 +48,9 @@ While.     Stmt ::= "while" "(" Expr ")" Stmt ;
 
 SExp.      Stmt ::= Expr  ";" ;
 
-Jump.      Stmt ::= continue ; | break ;
-  
+Cont.      Stmt ::=  "continue" ; 
+
+Break.     Stmt ::= "break" ;  
 
 -- Types ---------------------------------------------------
 
@@ -63,18 +64,9 @@ Void.      Type ::= "void" ;
 
 internal   Fun. Type ::= Type "(" [Type] ")" ;
 
-Array.      ArrType::= Type [ ]
+Array.      ArrType ::= Type "[" "]" ;
 
 separator  Type "," ;
-
--- Declarations 
-<array initializer> ::= { <variable initializers>? , ? }
-<variable initializers> ::= <variable initializer> | <variable initializers> , <variable initializer>
-
-<variable initializer> ::= <expression> | <array initializer>
-
-
-
 
 -- Expressions ---------------------------------------------
 
