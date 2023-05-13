@@ -24,6 +24,7 @@ data Value = IntVal Integer
 type Env = Map.Map Name Value -- mapping from names to values
 
 exampleExp = Lit 12 `Plus` (App (Abs "x" (Var "x")) (Lit 4 `Plus` Lit 2))
+wrongExp = Lit 12 `Plus` (App (Abs "y" (Var "x")) (Lit 4 `Plus` Lit 2))
 
 eval0 :: Env -> Exp -> Value 
 eval0 env (Lit i) = IntVal i
@@ -125,3 +126,43 @@ eval6 (App e1 e2) = do tick
                         _ -> throwError "type error in application"
 
 
+
+type Eval7 a = ReaderT Env (ExceptT String 
+                            (StateT Integer IO)) a
+
+runEval7 :: Env -> Integer -> Eval7 a -> IO(Either String a, Integer)
+runEval7 env st ev = 
+    runStateT (runExceptT (runReaderT ev env)) st
+
+eval7 :: Exp -> Eval7 Value
+eval7 (Lit i) = do tick
+                   liftIO $ print i
+                   return $ IntVal i
+eval7 (Var n) = do tick
+                   env <- ask
+                   case Map.lookup n env of 
+                    Nothing -> throwError ("ubound variable,  " ++ n)
+                    Just val -> return val
+eval7 (Plus e1 e2) = do tick
+                        e1' <- eval7 e1 
+                        e2' <- eval7 e2 
+                        case (e1', e2') of 
+                            (IntVal x, IntVal y) -> 
+                                return $ IntVal (x + y)
+                            _ -> throwError "type error in addition"
+eval7 (Abs n e) = do tick
+                     env <- ask
+                     return $ FunVal env n e
+eval7 (App e1 e2) = do tick
+                       val1 <- eval7 e1
+                       val2 <- eval7 e2
+                       case val1 of
+                        FunVal env' n body ->
+                            local (const (Map.insert n val2 env'))
+                            (eval7 body)
+                        _ -> throwError "type error in application"
+
+
+run :: IO (Either String Value, Integer)
+run = do
+    runEval7 Map.empty initialState (eval7 exampleExp)
