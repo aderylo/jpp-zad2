@@ -20,26 +20,34 @@ import Control.Monad.State
 import Control.Monad.Writer
 import Data.Maybe
 
+type Position = Maybe(Int, Int)
 
-evalProgram :: Program -> Eval7 Value
+type Eval a = ReaderT Env (ExceptT String (StateT Integer IO)) a
+
+runEval :: Env -> Integer -> Eval7 a -> IO(Either String a, Integer)
+runEval env st ev = runStateT (runExceptT (runReaderT ev env)) st
+
+
+
+
+evalProgram :: Program -> Eval Value
 evalProgram program = evalExpr (EApp  Nothing (Ident "main") []) 
 
-evalExpr :: Expr  -> Eval7 Value                        
+evalExpr :: Expr  -> Eval Value                        
 evalExpr (EApp _ funName expr) = return $ IntVal 1
-
+evalExpr _ = throwError "errr"
 
 
 interpret:: String -> IO ()
 interpret input = case parsedTokens of 
                       Right tree -> do 
                         (result, s) <-  runEval7 Map.empty initialState (evalProgram tree)
-                        case result of
-                          _ -> exitSuccess
-                        -- case  result of
-                        --   Left err -> do 
-                        --     putStrLn ("Eval error: " ++ err)
-                        --     exitFailure
-                        --   Right _ -> exitSuccess
+                        case  result of
+                          Left err -> do 
+                            putStrLn ("Eval error: " ++ err)
+                            exitFailure
+                          Right _ -> do
+                            exitSuccess
                       Left err -> do
                         putStrLn ("Parsing error: " ++ err)
                         exitFailure
