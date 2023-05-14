@@ -1,12 +1,12 @@
 module Main where
 
-import           Prelude                
+import           Prelude
 import           System.Environment (getArgs)
 import           System.Exit        (exitFailure, exitSuccess)
 import           Grammar.Lex
 import           Grammar.Par
 import           Grammar.Abs
-import           Grammar.ErrM 
+import           Grammar.ErrM
 -- import           Transformers
 import qualified Data.Map as Map
 import Control.Monad.Identity
@@ -16,7 +16,8 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Writer
 import Data.Maybe
-import Language.Haskell.TH (valD)
+import Language.Haskell.TH (valD, Dec)
+import CoreArity (exprArity)
 
 
 -- type Name = String    -- variable names
@@ -45,17 +46,20 @@ type Position = Maybe(Int, Int)
 
 type VarEnv = Map.Map Ident Value -- mapping from names to values
 type FunEnv = Map.Map Ident Function
-type Env = (VarEnv, FunEnv) 
+type Env = (VarEnv, FunEnv)
 
 type Store = Map.Map Ident Value
 
-type Eval a = ReaderT Env (ExceptT String (StateT Integer IO)) a
+type Eval a = StateT Store (ReaderT Env (ExceptT String IO)) a
 
-runEval :: Env -> Integer -> Eval a -> IO(Either String a, Integer)
-runEval env st ev = runStateT (runExceptT (runReaderT ev env)) st
+type Inter a = StateT Store (ReaderT Env (ExceptT String IO)) a
+
+runEval :: Store -> Env -> Eval a -> IO (Either String a)
+runEval store env eval =
+  runExceptT $ runReaderT (evalStateT eval store) env
 
 evalProgram :: Program -> Eval Value
-evalProgram program = evalExpr (EApp  Nothing (Ident "main") []) 
+evalProgram program = evalExpr (EApp  Nothing (Ident "main") [])
 
 evalBlock :: Block -> Eval ()
 evalBlock (Block _ stmts) = do
@@ -91,9 +95,42 @@ evalStmt (Cont _) = do
 evalStmt (Break _) = do
   throwError "Not implemented"
   return ()
-evalStmt _ = do
+evalStmt (Decl _ t items) = do
+  mapM_ (evalItem t) items
+evalStmt (Ass _ ident expr) = do
+  value <- evalExpr expr
+  modify (Map.insert ident value)
+evalStmt (Incr _ ident) = do
+  store <- get
+  case Map.lookup ident store of
+    Just (IntVal value) ->   modify (Map.insert ident (IntVal (value + 1)))
+    Nothing -> throwError "No such variable!"
+    _ -> throwError "Error: Increment operation only applies to integer variables"
+evalStmt (Decr _ ident) = do
+  store <- get
+  case Map.lookup ident store of
+    Just (IntVal value) ->   modify (Map.insert ident (IntVal (value - 1)))
+    Nothing -> throwError "No such variable!"
+    _ -> throwError "Error: Increment operation only applies to integer variables"
+evalStmt (Ret _ expr) = do
   throwError "Not implemented"
   return ()
+evalStmt (VRet _) = do
+  throwError "Not implemented"
+  return ()
+
+evalItem :: Type -> Item -> Eval ()
+evalItem t (NoInit _ ident)  = do
+  case t of
+    Int _ -> modify (Map.insert ident (IntVal 0))
+    Bool _ -> modify (Map.insert ident (BoolVal False))
+    Str _ -> modify (Map.insert ident (StringVal ""))
+    Void _ -> modify (Map.insert ident VoidVal)
+    _ -> throwError "Type error"
+evalItem t (Init _ ident expr) = do
+  value <- evalExpr expr
+  modify (Map.insert ident value)
+
 
 evalExpr :: Expr  -> Eval Value
 evalExpr (EVar _ ident) = do
@@ -164,11 +201,11 @@ evalExpr (EOr _ expr1 expr2) = do
 
 
 interpret:: String -> IO ()
-interpret input = case parsedTokens of 
-                      Right tree -> do 
-                        (result, s) <-  runEval (Map.empty, Map.empty) initialState (evalProgram tree)
+interpret input = case parsedTokens of
+                      Right tree -> do
+                        result <-  runEval Map.empty (Map.empty, Map.empty) (evalProgram tree)
                         case  result of
-                          Left err -> do 
+                          Left err -> do
                             putStrLn ("Eval error: " ++ err)
                             exitFailure
                           Right _ -> do
@@ -199,5 +236,5 @@ main = do
     ["--help"] -> usage -- help panel 
     [] -> getContents >>= interpret
     [f] ->  readFile f >>= interpret
-    _ -> do putStrLn "Too many arguments" 
+    _ -> do putStrLn "Too many arguments"
             exitFailure
