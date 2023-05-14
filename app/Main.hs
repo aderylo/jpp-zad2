@@ -36,11 +36,30 @@ type FunEnv = Map.Map Ident Function
 
 type Env = (VarEnv, FunEnv)
 
-type Store = Map.Map Ident Value
+type VarStore = Map.Map Ident Value
+
+type ReturnStore = Value
+
+type Store = (VarStore, ReturnStore)
 
 type Eval a = StateT Store (ReaderT Env (ExceptT String IO)) a
 
 type Inter a = StateT Store (ReaderT Env (ExceptT String IO)) a
+
+setReturnValue :: Value -> Eval ()
+setReturnValue value = do
+  (varStore, _) <- get
+  put (varStore, value)
+
+getReturnValue :: Eval Value
+getReturnValue = do
+  (_, returnStore) <- get
+  return returnStore
+
+updateVarStore :: Ident -> Value -> Eval ()
+updateVarStore ident value = do
+  (varStore, returnStore) <- get
+  put (Map.insert ident value varStore, returnStore)
 
 runEval :: Store -> Env -> Eval a -> IO (Either String a)
 runEval store env eval =
@@ -79,7 +98,7 @@ evalTopDef (FnDef _ t ident args block) = do
         callEnv <- ask
         scoped <- evalArgsDeclarations args exprs
         local (const scoped) (evalBlock block)
-        return VoidVal
+        getReturnValue 
 
 evalTopDefs :: [TopDef] -> Eval Env
 evalTopDefs topDefs = do
@@ -87,8 +106,17 @@ evalTopDefs topDefs = do
   return (mconcat envs)
 
 evalBlock :: Block -> Eval ()
-evalBlock (Block _ stmts) = do
-  mapM_ evalStmt stmts
+evalBlock (Block _ stmts) = evalStmts stmts
+  where
+    evalStmts [] = return () -- No more statements to evaluate
+    evalStmts (stmt:rest) = do
+      evalStmt stmt
+      checkForReturn stmt rest
+
+    checkForReturn :: Stmt -> [Stmt] -> Eval ()
+    checkForReturn (Ret _ _) _ = return () -- Stop evaluating after encountering a `Ret` statement
+    checkForReturn _ [] = return () -- Stop evaluating at the end of the statement list
+    checkForReturn _ (stmt:rest) = evalStmt stmt >> checkForReturn stmt rest -- Continue evaluating
 
 evalStmt :: Stmt -> Eval ()
 evalStmt (Empty _) = return ()
@@ -124,37 +152,36 @@ evalStmt (Decl _ t items) = do
   mapM_ (evalItem t) items
 evalStmt (Ass _ ident expr) = do
   value <- evalExpr expr
-  modify (Map.insert ident value)
+  updateVarStore ident value
 evalStmt (Incr _ ident) = do
-  store <- get
-  case Map.lookup ident store of
-    Just (IntVal value) -> modify (Map.insert ident (IntVal (value + 1)))
+  (varStore, _) <- get
+  case Map.lookup ident varStore of
+    Just (IntVal value) -> updateVarStore ident (IntVal (value + 1))
     Nothing -> throwError "No such variable!"
     _ -> throwError "Error: Increment operation only applies to integer variables"
 evalStmt (Decr _ ident) = do
-  store <- get
-  case Map.lookup ident store of
-    Just (IntVal value) -> modify (Map.insert ident (IntVal (value - 1)))
+  (varStore, _) <- get
+  case Map.lookup ident varStore of
+    Just (IntVal value) -> updateVarStore ident (IntVal (value - 1))
     Nothing -> throwError "No such variable!"
     _ -> throwError "Error: Increment operation only applies to integer variables"
 evalStmt (Ret _ expr) = do
-  throwError "Not implemented"
-  return ()
+  value <- evalExpr expr
+  setReturnValue value
 evalStmt (VRet _) = do
-  throwError "Not implemented"
-  return ()
+  setReturnValue VoidVal
 
 evalItem :: Type -> Item -> Eval ()
 evalItem t (NoInit _ ident) = do
   case t of
-    Int _ -> modify (Map.insert ident (IntVal 0))
-    Bool _ -> modify (Map.insert ident (BoolVal False))
-    Str _ -> modify (Map.insert ident (StringVal ""))
-    Void _ -> modify (Map.insert ident VoidVal)
+    Int _ -> updateVarStore ident (IntVal 0)
+    Bool _ -> updateVarStore ident (BoolVal False)
+    Str _ -> updateVarStore ident (StringVal "")
+    Void _ -> updateVarStore ident VoidVal
     _ -> throwError "Type error"
 evalItem t (Init _ ident expr) = do
   value <- evalExpr expr
-  modify (Map.insert ident value)
+  updateVarStore ident value
 
 evalExpr :: Expr -> Eval Value
 evalExpr (EVar _ ident) = do
@@ -229,18 +256,19 @@ evalExprs exprs = mapM evalExpr exprs
 interpret :: String -> IO ()
 interpret input = case parsedTokens of
   Right tree -> do
-    result <- runEval Map.empty (Map.empty, Map.empty) (evalProgram tree)
+    result <- runEval (Map.empty, initialState) (Map.empty, Map.empty) (evalProgram tree)
     case result of
       Left err -> do
         putStrLn ("Eval error: " ++ err)
         exitFailure
-      Right _ -> do
+      Right v -> do
+        putStrLn ("Program returned:  " ++ show v)
         exitSuccess
   Left err -> do
     putStrLn ("Parsing error: " ++ err)
     exitFailure
   where
-    initialState = 0
+    initialState = IntVal 0
     tokens = myLexer input
     parsedTokens = pProgram tokens
 
