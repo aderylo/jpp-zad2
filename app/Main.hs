@@ -2,6 +2,7 @@ module Main where
 
 -- import           Transformers
 
+import Control.Monad
 import Control.Monad.Except
 import Control.Monad.Identity
 import Control.Monad.Reader
@@ -18,7 +19,6 @@ import Language.Haskell.TH (Dec, valD)
 import System.Environment (getArgs)
 import System.Exit (exitFailure, exitSuccess)
 import Prelude
-import Control.Monad
 
 data Value
   = VoidVal
@@ -39,7 +39,7 @@ type Env = (VarEnv, FunEnv)
 
 type Scope = Ident
 
-type VarStore = Map.Map (Scope, Ident)  Value
+type VarStore = Map.Map (Scope, Ident) Value
 
 type ReturnStore = Value
 
@@ -78,10 +78,8 @@ evalProgram (Program _ topDefs) = do
   functionDefEnv <- local (const startEnv) (evalTopDefs topDefs)
   local (const functionDefEnv) (evalExpr (EApp Nothing (Ident "main") []))
 
-
 startEnv :: Env
-startEnv = (Map.empty, Map.empty)  
-
+startEnv = (Map.empty, Map.empty)
 
 evalArgDeclaration :: (Arg, Expr) -> Eval (Ident, Value)
 evalArgDeclaration (Arg _ t ident, expr) = do
@@ -95,12 +93,9 @@ populateEnvWithArgValue (ident, value) = do
 
 populateEnvWithArgsValues :: [(Ident, Value)] -> Eval Env
 populateEnvWithArgsValues [] = ask
-populateEnvWithArgsValues (arg:rest) = do
+populateEnvWithArgsValues (arg : rest) = do
   newEnv <- populateEnvWithArgValue arg
   local (const newEnv) (populateEnvWithArgsValues rest)
-
-
-
 
 evalTopDef :: TopDef -> Eval Env
 evalTopDef (FnDef _ t ident args block) = do
@@ -112,14 +107,14 @@ evalTopDef (FnDef _ t ident args block) = do
     evalFunDeclaration localEnv exprs =
       do
         callEnv <- ask
-        arguments <- mapM  evalArgDeclaration (zip args exprs)
+        arguments <- mapM evalArgDeclaration (zip args exprs)
         scoped <- local (const callEnv) $ populateEnvWithArgsValues arguments
         local (const scoped) (evalBlock block)
         getReturnValue
 
 evalTopDefs :: [TopDef] -> Eval Env
 evalTopDefs [] = ask
-evalTopDefs (topDef:rest) = do
+evalTopDefs (topDef : rest) = do
   newEnv <- evalTopDef topDef
   local (const newEnv) (evalTopDefs rest)
 
@@ -127,14 +122,14 @@ evalBlock :: Block -> Eval ()
 evalBlock (Block _ stmts) = evalStmts stmts
   where
     evalStmts [] = return () -- No more statements to evaluate
-    evalStmts (stmt:rest) = do
+    evalStmts (stmt : rest) = do
       evalStmt stmt
       checkForReturn stmt rest
 
     checkForReturn :: Stmt -> [Stmt] -> Eval ()
     checkForReturn (Ret _ _) _ = return () -- Stop evaluating after encountering a `Ret` statement
     checkForReturn _ [] = return () -- Stop evaluating at the end of the statement list
-    checkForReturn _ (stmt:rest) = evalStmt stmt >> checkForReturn stmt rest -- Continue evaluating
+    checkForReturn _ (stmt : rest) = evalStmt stmt >> checkForReturn stmt rest -- Continue evaluating
 
 evalStmt :: Stmt -> Eval ()
 evalStmt (Empty _) = return ()
