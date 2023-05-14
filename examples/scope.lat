@@ -1,9 +1,9 @@
-int fun(int x){
+int fun(){
+    x = 7;
     return x; 
 }
 
 int main(){
-    return fun(1);   
+    int x = 5;
+    return fun();
 }
-
-

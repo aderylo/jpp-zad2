@@ -1,5 +1,8 @@
 # JPP Zadanie 2
 
+Link do repo: 
+https://github.com/aderylo/jpp-zad2
+
 Zadanie: 
 1. Deklaracja języka do implementacji – do czwartku 6 kwietnia 2023.
 Należy oddać (przez Moodle'a) dokument zawierający opis języka wybranego do implementacji.
