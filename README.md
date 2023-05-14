@@ -78,3 +78,17 @@ Co więcej, język nie będzie czysto object-oriented, ponieważ zamierzam najp
 Razem: 27 + 16? 
 
 Nie mam pojęcia jak wycenić 19 oraz 20 więc na wszelki wypadek szacuje od góry, a przynajmniej mam taką nadzieje ;)
+
+---
+
+# Kompilacja
+
+```
+cd app
+ghc Main.hs -outputdir build
+```
+
+# Użycie
+```
+ ./Main ../examples/printing.lat
+```
