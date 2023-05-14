@@ -18,6 +18,7 @@ import Language.Haskell.TH (Dec, valD)
 import System.Environment (getArgs)
 import System.Exit (exitFailure, exitSuccess)
 import Prelude
+import Control.Monad
 
 data Value
   = VoidVal
@@ -74,8 +75,13 @@ runEval store env eval =
 
 evalProgram :: Program -> Eval Value
 evalProgram (Program _ topDefs) = do
-  env <- evalTopDefs topDefs
-  local (const env) (evalExpr (EApp Nothing (Ident "main") []))
+  functionDefEnv <- local (const startEnv) (evalTopDefs topDefs)
+  local (const functionDefEnv) (evalExpr (EApp Nothing (Ident "main") []))
+
+
+startEnv :: Env
+startEnv = (Map.empty, Map.empty)  
+
 
 evalArgDeclaration :: (Arg, Expr) -> Eval (Ident, Value)
 evalArgDeclaration (Arg _ t ident, expr) = do
@@ -87,11 +93,14 @@ populateEnvWithArgValue (ident, value) = do
   (vEnv, fEnv) <- ask
   return (Map.insert ident value vEnv, fEnv)
 
-evalArgsDeclarations :: [Arg] -> [Expr] -> Eval Env
-evalArgsDeclarations args exprs = do
-  argValues <- mapM evalArgDeclaration (zip args exprs)
-  envs <- mapM populateEnvWithArgValue argValues
-  return (mconcat envs)
+populateEnvWithArgsValues :: [(Ident, Value)] -> Eval Env
+populateEnvWithArgsValues [] = ask
+populateEnvWithArgsValues (arg:rest) = do
+  newEnv <- populateEnvWithArgValue arg
+  local (const newEnv) (populateEnvWithArgsValues rest)
+
+
+
 
 evalTopDef :: TopDef -> Eval Env
 evalTopDef (FnDef _ t ident args block) = do
@@ -103,13 +112,16 @@ evalTopDef (FnDef _ t ident args block) = do
     evalFunDeclaration localEnv exprs =
       do
         callEnv <- ask
-        scoped <- evalArgsDeclarations args exprs
+        arguments <- mapM  evalArgDeclaration (zip args exprs)
+        scoped <- local (const callEnv) $ populateEnvWithArgsValues arguments
         local (const scoped) (evalBlock block)
         getReturnValue
+
 evalTopDefs :: [TopDef] -> Eval Env
-evalTopDefs topDefs = do
-  envs <- mapM evalTopDef topDefs
-  return (mconcat envs)
+evalTopDefs [] = ask
+evalTopDefs (topDef:rest) = do
+  newEnv <- evalTopDef topDef
+  local (const newEnv) (evalTopDefs rest)
 
 evalBlock :: Block -> Eval ()
 evalBlock (Block _ stmts) = evalStmts stmts
