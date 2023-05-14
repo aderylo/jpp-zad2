@@ -18,6 +18,7 @@ import Control.Monad.Writer
 import Data.Maybe
 import Language.Haskell.TH (valD)
 
+
 -- type Name = String    -- variable names
 -- data Exp = Lit Integer -- expressions
 --             | Var Name
@@ -46,6 +47,8 @@ type VarEnv = Map.Map Ident Value -- mapping from names to values
 type FunEnv = Map.Map Ident Function
 type Env = (VarEnv, FunEnv) 
 
+type Store = Map.Map Ident Value
+
 type Eval a = ReaderT Env (ExceptT String (StateT Integer IO)) a
 
 runEval :: Env -> Integer -> Eval a -> IO(Either String a, Integer)
@@ -53,6 +56,44 @@ runEval env st ev = runStateT (runExceptT (runReaderT ev env)) st
 
 evalProgram :: Program -> Eval Value
 evalProgram program = evalExpr (EApp  Nothing (Ident "main") []) 
+
+evalBlock :: Block -> Eval ()
+evalBlock (Block _ stmts) = do
+  mapM_ evalStmt stmts
+
+evalStmt :: Stmt -> Eval ()
+evalStmt (Empty _) = return ()
+evalStmt (BStmt _ block) = evalBlock block
+evalStmt (Cond _ expr stmt) = do
+  v <- evalExpr expr
+  case v of
+    BoolVal True -> evalStmt stmt
+    BoolVal False -> return ()
+    _ -> throwError "Type error"
+evalStmt (CondElse _ expr stmt1 stmt2) = do
+  v <- evalExpr expr
+  case v of
+    BoolVal True -> evalStmt stmt1
+    BoolVal False -> evalStmt stmt2
+    _ -> throwError "Type error"
+evalStmt (While _ expr stmt) = do
+  v <- evalExpr expr
+  case v of
+    BoolVal True -> evalStmt stmt >> evalStmt (While Nothing expr stmt)
+    BoolVal False -> return ()
+    _ -> throwError "Type error"
+evalStmt (SExp _ expr) = do
+  evalExpr expr
+  return ()
+evalStmt (Cont _) = do
+  throwError "Not implemented"
+  return ()
+evalStmt (Break _) = do
+  throwError "Not implemented"
+  return ()
+evalStmt _ = do
+  throwError "Not implemented"
+  return ()
 
 evalExpr :: Expr  -> Eval Value
 evalExpr (EVar _ ident) = do
