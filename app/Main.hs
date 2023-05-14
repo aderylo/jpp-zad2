@@ -1,24 +1,27 @@
 module Main where
 
-import           Prelude
-import           System.Environment (getArgs)
-import           System.Exit        (exitFailure, exitSuccess)
-import           Grammar.Lex
-import           Grammar.Par
-import           Grammar.Abs
-import           Grammar.ErrM
 -- import           Transformers
-import qualified Data.Map as Map
-import Control.Monad.Identity
+
 import Control.Monad.Except
+import Control.Monad.Identity
 import Control.Monad.Reader
-    ( MonadIO(liftIO), ReaderT(runReaderT), MonadReader (ask) )
+  ( MonadIO (liftIO),
+    MonadReader (ask),
+    ReaderT (runReaderT),
+  )
 import Control.Monad.State
 import Control.Monad.Writer
-import Data.Maybe
-import Language.Haskell.TH (valD, Dec)
 import CoreArity (exprArity)
-
+import qualified Data.Map as Map
+import Data.Maybe
+import Grammar.Abs
+import Grammar.ErrM
+import Grammar.Lex
+import Grammar.Par
+import Language.Haskell.TH (Dec, valD)
+import System.Environment (getArgs)
+import System.Exit (exitFailure, exitSuccess)
+import Prelude
 
 -- type Name = String    -- variable names
 -- data Exp = Lit Integer -- expressions
@@ -34,18 +37,21 @@ import CoreArity (exprArity)
 
 -- type Env = Map.Map Name Value -- mapping from names to values
 
-data Value = VoidVal
-    | IntVal Integer
-    | BoolVal Bool
-    | StringVal String
-    deriving (Show)
+data Value
+  = VoidVal
+  | IntVal Integer
+  | BoolVal Bool
+  | StringVal String
+  deriving (Show)
 
 newtype Function = Function ([Expr] -> Eval Value)
-type Position = Maybe(Int, Int)
 
+type Position = Maybe (Int, Int)
 
 type VarEnv = Map.Map Ident Value -- mapping from names to values
+
 type FunEnv = Map.Map Ident Function
+
 type Env = (VarEnv, FunEnv)
 
 type Store = Map.Map Ident Value
@@ -59,7 +65,7 @@ runEval store env eval =
   runExceptT $ runReaderT (evalStateT eval store) env
 
 evalProgram :: Program -> Eval Value
-evalProgram program = evalExpr (EApp  Nothing (Ident "main") [])
+evalProgram program = evalExpr (EApp Nothing (Ident "main") [])
 
 evalBlock :: Block -> Eval ()
 evalBlock (Block _ stmts) = do
@@ -103,13 +109,13 @@ evalStmt (Ass _ ident expr) = do
 evalStmt (Incr _ ident) = do
   store <- get
   case Map.lookup ident store of
-    Just (IntVal value) ->   modify (Map.insert ident (IntVal (value + 1)))
+    Just (IntVal value) -> modify (Map.insert ident (IntVal (value + 1)))
     Nothing -> throwError "No such variable!"
     _ -> throwError "Error: Increment operation only applies to integer variables"
 evalStmt (Decr _ ident) = do
   store <- get
   case Map.lookup ident store of
-    Just (IntVal value) ->   modify (Map.insert ident (IntVal (value - 1)))
+    Just (IntVal value) -> modify (Map.insert ident (IntVal (value - 1)))
     Nothing -> throwError "No such variable!"
     _ -> throwError "Error: Increment operation only applies to integer variables"
 evalStmt (Ret _ expr) = do
@@ -120,7 +126,7 @@ evalStmt (VRet _) = do
   return ()
 
 evalItem :: Type -> Item -> Eval ()
-evalItem t (NoInit _ ident)  = do
+evalItem t (NoInit _ ident) = do
   case t of
     Int _ -> modify (Map.insert ident (IntVal 0))
     Bool _ -> modify (Map.insert ident (BoolVal False))
@@ -131,14 +137,13 @@ evalItem t (Init _ ident expr) = do
   value <- evalExpr expr
   modify (Map.insert ident value)
 
-
-evalExpr :: Expr  -> Eval Value
+evalExpr :: Expr -> Eval Value
 evalExpr (EVar _ ident) = do
   (varEnv, _) <- ask
   case Map.lookup ident varEnv of
     Just val -> return val
     Nothing -> throwError ("Variable " ++ show ident ++ " not found")
-evalExpr (ELitInt _ v) =  return $ IntVal v
+evalExpr (ELitInt _ v) = return $ IntVal v
 evalExpr (ELitTrue _) = return $ BoolVal True
 evalExpr (ELitFalse _) = return $ BoolVal False
 evalExpr (EApp _ ident exprs) = do
@@ -150,7 +155,7 @@ evalExpr (EString _ str) = return $ StringVal str
 evalExpr (Neg _ expr) = do
   v <- evalExpr expr
   case v of
-    IntVal i -> return $ IntVal (-i)
+    IntVal i -> return $ IntVal (- i)
     _ -> throwError "Type error"
 evalExpr (Not _ expr) = do
   v <- evalExpr expr
@@ -199,42 +204,42 @@ evalExpr (EOr _ expr1 expr2) = do
     (BoolVal b1, BoolVal b2) -> return $ BoolVal (b1 || b2)
     _ -> throwError "Type error"
 
-
-interpret:: String -> IO ()
+interpret :: String -> IO ()
 interpret input = case parsedTokens of
-                      Right tree -> do
-                        result <-  runEval Map.empty (Map.empty, Map.empty) (evalProgram tree)
-                        case  result of
-                          Left err -> do
-                            putStrLn ("Eval error: " ++ err)
-                            exitFailure
-                          Right _ -> do
-                            exitSuccess
-                      Left err -> do
-                        putStrLn ("Parsing error: " ++ err)
-                        exitFailure
-                  where
-                    initialState = 0
-                    tokens = myLexer input
-                    parsedTokens = pProgram tokens
-
+  Right tree -> do
+    result <- runEval Map.empty (Map.empty, Map.empty) (evalProgram tree)
+    case result of
+      Left err -> do
+        putStrLn ("Eval error: " ++ err)
+        exitFailure
+      Right _ -> do
+        exitSuccess
+  Left err -> do
+    putStrLn ("Parsing error: " ++ err)
+    exitFailure
+  where
+    initialState = 0
+    tokens = myLexer input
+    parsedTokens = pProgram tokens
 
 usage :: IO ()
 usage = do
-  putStrLn $ unlines
-    [ "usage: Call with one of the following argument combinations:"
-    , "  --help          Display this help message."
-    , "  (no arguments)  Run interpreter on program from stdin"
-    , "  filepath        Run interpreter on program from filepath"
-    ]
+  putStrLn $
+    unlines
+      [ "usage: Call with one of the following argument combinations:",
+        "  --help          Display this help message.",
+        "  (no arguments)  Run interpreter on program from stdin",
+        "  filepath        Run interpreter on program from filepath"
+      ]
   exitFailure
 
 main :: IO ()
 main = do
   args <- getArgs
   case args of
-    ["--help"] -> usage -- help panel 
+    ["--help"] -> usage -- help panel
     [] -> getContents >>= interpret
-    [f] ->  readFile f >>= interpret
-    _ -> do putStrLn "Too many arguments"
-            exitFailure
+    [f] -> readFile f >>= interpret
+    _ -> do
+      putStrLn "Too many arguments"
+      exitFailure
