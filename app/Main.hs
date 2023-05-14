@@ -35,7 +35,7 @@ type VarEnv = Map.Map Ident Value -- mapping from names to values
 
 type FunEnv = Map.Map Ident Function
 
-type Env = (VarEnv, FunEnv)
+type Env = (VarEnv, FunEnv, Scope)
 
 type Scope = Ident
 
@@ -43,7 +43,7 @@ type VarStore = Map.Map (Scope, Ident) Value
 
 type ReturnStore = Value
 
-type Store = (VarStore, ReturnStore, Scope)
+type Store = (VarStore, ReturnStore)
 
 type Eval a = StateT Store (ReaderT Env (ExceptT String IO)) a
 
@@ -51,23 +51,19 @@ type Inter a = StateT Store (ReaderT Env (ExceptT String IO)) a
 
 setReturnValue :: Value -> Eval ()
 setReturnValue value = do
-  (varStore, _, scope) <- get
-  put (varStore, value, scope)
+  (varStore, _) <- get
+  put (varStore, value)
 
 getReturnValue :: Eval Value
 getReturnValue = do
-  (_, returnStore, _) <- get
+  (_, returnStore) <- get
   return returnStore
 
 updateVarStore :: Ident -> Value -> Eval ()
 updateVarStore ident value = do
-  (varStore, returnStore, scope) <- get
-  put (Map.insert (scope, ident) value varStore, returnStore, scope)
-
-setScope :: Ident -> Eval ()
-setScope ident = do
-  (varStore, returnStore, _) <- get
-  put (varStore, returnStore, ident)
+  (_, _, scope) <- ask
+  (varStore, returnStore) <- get
+  put (Map.insert (scope, ident) value varStore, returnStore)
 
 runEval :: Store -> Env -> Eval a -> IO (Either String a)
 runEval store env eval =
@@ -78,29 +74,39 @@ evalProgram (Program _ topDefs) = do
   functionDefEnv <- local (const startEnv) (evalTopDefs topDefs)
   local (const functionDefEnv) (evalExpr (EApp Nothing (Ident "main") []))
 
+startScope :: Scope
+startScope = Ident "global"
+
 startEnv :: Env
-startEnv = (Map.empty, Map.empty)
+startEnv = (Map.empty, Map.empty, startScope)
 
 evalArgDeclaration :: (Arg, Expr) -> Eval (Ident, Value)
 evalArgDeclaration (Arg _ t ident, expr) = do
   value <- evalExpr expr
   return (ident, value)
 
-populateEnvWithArgValue :: (Ident, Value) -> Eval Env
-populateEnvWithArgValue (ident, value) = do
-  (vEnv, fEnv) <- ask
-  return (Map.insert ident value vEnv, fEnv)
+changeEnvScope :: Ident -> Eval Env
+changeEnvScope ident = do
+  (vEnv, fEnv, _) <- ask
+  return (vEnv, fEnv, ident)
 
-populateEnvWithArgsValues :: [(Ident, Value)] -> Eval Env
-populateEnvWithArgsValues [] = ask
-populateEnvWithArgsValues (arg : rest) = do
-  newEnv <- populateEnvWithArgValue arg
-  local (const newEnv) (populateEnvWithArgsValues rest)
+populateStoreWithArgsValues :: Scope -> [(Ident, Value)] -> Eval ()
+populateStoreWithArgsValues scope [] = return ()
+populateStoreWithArgsValues scope (arg : rest) = do
+  (varStore, returnStore) <- get
+  put (Map.insert (scope, fst arg) (snd arg) varStore, returnStore)
+  populateStoreWithArgsValues scope rest
+
+cleanUpAfterFunctionCall :: Scope -> Eval ()
+cleanUpAfterFunctionCall scope = do
+  (varStore, returnStore) <- get
+  let newVarStore = Map.filterWithKey (\(s, _) _ -> s /= scope) varStore
+  put (newVarStore, returnStore)
 
 evalTopDef :: TopDef -> Eval Env
-evalTopDef (FnDef _ t ident args block) = do
-  (vEnv, fEnv) <- ask
-  let newEnv = (vEnv, Map.insert ident (Function $ evalFunDeclaration newEnv) fEnv)
+evalTopDef (FnDef _ t fName args block) = do
+  (vEnv, fEnv, scope) <- ask
+  let newEnv = (vEnv, Map.insert fName (Function $ evalFunDeclaration newEnv) fEnv, scope)
   return newEnv
   where
     evalFunDeclaration :: Env -> [Expr] -> Eval Value
@@ -108,8 +114,10 @@ evalTopDef (FnDef _ t ident args block) = do
       do
         callEnv <- ask
         arguments <- mapM evalArgDeclaration (zip args exprs)
-        scoped <- local (const callEnv) $ populateEnvWithArgsValues arguments
-        local (const scoped) (evalBlock block)
+        scopedEnv <- local (const callEnv) $ changeEnvScope fName 
+        populateStoreWithArgsValues fName arguments
+        local (const scopedEnv) (evalBlock block)
+        cleanUpAfterFunctionCall fName
         getReturnValue
 
 evalTopDefs :: [TopDef] -> Eval Env
@@ -167,13 +175,15 @@ evalStmt (Ass _ ident expr) = do
   value <- evalExpr expr
   updateVarStore ident value
 evalStmt (Incr _ ident) = do
-  (varStore, _, scope) <- get
+  (_, _, scope) <- ask
+  (varStore, _) <- get
   case Map.lookup (scope, ident) varStore of
     Just (IntVal value) -> updateVarStore ident (IntVal (value + 1))
     Nothing -> throwError ("Variable " ++ show ident ++ " not in scope")
     _ -> throwError "Error: Increment operation only applies to integer variables"
 evalStmt (Decr _ ident) = do
-  (varStore, _, scope) <- get
+  (_, _, scope) <- ask
+  (varStore, _) <- get
   case Map.lookup (scope, ident) varStore of
     Just (IntVal value) -> updateVarStore ident (IntVal (value - 1))
     Nothing -> throwError ("Variable " ++ show ident ++ " not in scope")
@@ -199,7 +209,8 @@ evalItem t (Init _ ident expr) = do
 
 evalExpr :: Expr -> Eval Value
 evalExpr (EVar _ ident) = do
-  (varStore, _, scope) <- get
+  (_, _, scope) <- ask
+  (varStore, _) <- get
   case Map.lookup (scope, ident) varStore of
     Just value -> return value
     Nothing -> throwError ("Variable " ++ show ident ++ " not in scope")
@@ -207,8 +218,7 @@ evalExpr (ELitInt _ v) = return $ IntVal v
 evalExpr (ELitTrue _) = return $ BoolVal True
 evalExpr (ELitFalse _) = return $ BoolVal False
 evalExpr (EApp _ ident exprs) = do
-  (varEnv, funEnv) <- ask
-  setScope ident
+  (varEnv, funEnv, scope) <- ask
   case Map.lookup ident funEnv of
     Just (Function f) -> f exprs
     Nothing -> throwError ("Function " ++ show ident ++ " not found")
@@ -271,7 +281,7 @@ evalExprs exprs = mapM evalExpr exprs
 interpret :: String -> IO ()
 interpret input = case parsedTokens of
   Right tree -> do
-    result <- runEval (Map.empty, initialState, initialScope) (Map.empty, Map.empty) (evalProgram tree)
+    result <- runEval (Map.empty, initialState) (Map.empty, Map.empty, initialScope) (evalProgram tree)
     case result of
       Left err -> do
         putStrLn ("Eval error: " ++ err)
