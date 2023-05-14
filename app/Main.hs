@@ -5,10 +5,6 @@ module Main where
 import Control.Monad.Except
 import Control.Monad.Identity
 import Control.Monad.Reader
-  ( MonadIO (liftIO),
-    MonadReader (ask),
-    ReaderT (runReaderT),
-  )
 import Control.Monad.State
 import Control.Monad.Writer
 import CoreArity (exprArity)
@@ -22,20 +18,6 @@ import Language.Haskell.TH (Dec, valD)
 import System.Environment (getArgs)
 import System.Exit (exitFailure, exitSuccess)
 import Prelude
-
--- type Name = String    -- variable names
--- data Exp = Lit Integer -- expressions
---             | Var Name
---             | Plus Exp Exp
---             | Abs Name Exp
---             | App Exp Exp
---             deriving (Show )
-
--- data Value = IntVal Integer
---             | FunVal Env Name Exp
---             deriving (Show )
-
--- type Env = Map.Map Name Value -- mapping from names to values
 
 data Value
   = VoidVal
@@ -65,7 +47,44 @@ runEval store env eval =
   runExceptT $ runReaderT (evalStateT eval store) env
 
 evalProgram :: Program -> Eval Value
-evalProgram program = evalExpr (EApp Nothing (Ident "main") [])
+evalProgram (Program _ topDefs) = do
+  env <- evalTopDefs topDefs
+  local (const env) (evalExpr (EApp Nothing (Ident "main") []))
+
+evalArgDeclaration :: (Arg, Expr) -> Eval (Ident, Value)
+evalArgDeclaration (Arg _ t ident, expr) = do
+  value <- evalExpr expr
+  return (ident, value)
+
+populateEnvWithArgValue :: (Ident, Value) -> Eval Env
+populateEnvWithArgValue (ident, value) = do
+  (vEnv, fEnv) <- ask
+  return (Map.insert ident value vEnv, fEnv)
+
+evalArgsDeclarations :: [Arg] -> [Expr] -> Eval Env
+evalArgsDeclarations args exprs = do
+  argValues <- mapM evalArgDeclaration (zip args exprs)
+  envs <- mapM populateEnvWithArgValue argValues
+  return (mconcat envs)
+
+evalTopDef :: TopDef -> Eval Env
+evalTopDef (FnDef _ t ident args block) = do
+  (vEnv, fEnv) <- ask
+  let newEnv = (vEnv, Map.insert ident (Function $ evalFunDeclaration newEnv) fEnv)
+  return newEnv
+  where
+    evalFunDeclaration :: Env -> [Expr] -> Eval Value
+    evalFunDeclaration localEnv exprs =
+      do
+        callEnv <- ask
+        scoped <- evalArgsDeclarations args exprs
+        local (const scoped) (evalBlock block)
+        return VoidVal
+
+evalTopDefs :: [TopDef] -> Eval Env
+evalTopDefs topDefs = do
+  envs <- mapM evalTopDef topDefs
+  return (mconcat envs)
 
 evalBlock :: Block -> Eval ()
 evalBlock (Block _ stmts) = do
@@ -203,6 +222,9 @@ evalExpr (EOr _ expr1 expr2) = do
   case (e1, e2) of
     (BoolVal b1, BoolVal b2) -> return $ BoolVal (b1 || b2)
     _ -> throwError "Type error"
+
+evalExprs :: [Expr] -> Eval [Value]
+evalExprs exprs = mapM evalExpr exprs
 
 interpret :: String -> IO ()
 interpret input = case parsedTokens of
