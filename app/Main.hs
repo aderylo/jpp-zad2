@@ -78,7 +78,42 @@ startScope :: Scope
 startScope = Ident "global"
 
 startEnv :: Env
-startEnv = (Map.empty, Map.empty, startScope)
+startEnv =
+  ( Map.empty,
+    Map.fromList
+      [ (Ident "printString", Function printString),
+        (Ident "printInt", Function printInt),
+        (Ident "printBool", Function printBool)
+      ],
+    startScope
+  )
+  where
+    printString :: [Expr] -> Eval Value
+    printString =
+      \[expr] -> do
+        value <- evalExpr expr
+        case value of
+          StringVal s -> liftIO $ print s
+          _ -> throwError "Type error"
+        return VoidVal
+
+    printInt :: [Expr] -> Eval Value
+    printInt =
+      \[expr] -> do
+        value <- evalExpr expr
+        case value of
+          IntVal i -> liftIO $ print i
+          _ -> throwError "Type error"
+        return VoidVal
+
+    printBool :: [Expr] -> Eval Value
+    printBool =
+      \[expr] -> do
+        value <- evalExpr expr
+        case value of
+          BoolVal b -> liftIO $ print b
+          _ -> throwError "Type error"
+        return VoidVal
 
 evalArgDeclaration :: (Arg, Expr) -> Eval (Ident, Value)
 evalArgDeclaration (Arg _ t ident, expr) = do
@@ -114,7 +149,7 @@ evalTopDef (FnDef _ t fName args block) = do
       do
         callEnv <- ask
         arguments <- mapM evalArgDeclaration (zip args exprs)
-        scopedEnv <- local (const callEnv) $ changeEnvScope fName 
+        scopedEnv <- local (const callEnv) $ changeEnvScope fName
         populateStoreWithArgsValues fName arguments
         local (const scopedEnv) (evalBlock block)
         cleanUpAfterFunctionCall fName
