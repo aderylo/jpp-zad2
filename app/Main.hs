@@ -36,11 +36,13 @@ type FunEnv = Map.Map Ident Function
 
 type Env = (VarEnv, FunEnv)
 
-type VarStore = Map.Map Ident Value
+type Scope = Ident
+
+type VarStore = Map.Map (Scope, Ident)  Value
 
 type ReturnStore = Value
 
-type Store = (VarStore, ReturnStore)
+type Store = (VarStore, ReturnStore, Scope)
 
 type Eval a = StateT Store (ReaderT Env (ExceptT String IO)) a
 
@@ -48,18 +50,23 @@ type Inter a = StateT Store (ReaderT Env (ExceptT String IO)) a
 
 setReturnValue :: Value -> Eval ()
 setReturnValue value = do
-  (varStore, _) <- get
-  put (varStore, value)
+  (varStore, _, scope) <- get
+  put (varStore, value, scope)
 
 getReturnValue :: Eval Value
 getReturnValue = do
-  (_, returnStore) <- get
+  (_, returnStore, _) <- get
   return returnStore
 
 updateVarStore :: Ident -> Value -> Eval ()
 updateVarStore ident value = do
-  (varStore, returnStore) <- get
-  put (Map.insert ident value varStore, returnStore)
+  (varStore, returnStore, scope) <- get
+  put (Map.insert (scope, ident) value varStore, returnStore, scope)
+
+setScope :: Ident -> Eval ()
+setScope ident = do
+  (varStore, returnStore, _) <- get
+  put (varStore, returnStore, ident)
 
 runEval :: Store -> Env -> Eval a -> IO (Either String a)
 runEval store env eval =
@@ -98,8 +105,7 @@ evalTopDef (FnDef _ t ident args block) = do
         callEnv <- ask
         scoped <- evalArgsDeclarations args exprs
         local (const scoped) (evalBlock block)
-        getReturnValue 
-
+        getReturnValue
 evalTopDefs :: [TopDef] -> Eval Env
 evalTopDefs topDefs = do
   envs <- mapM evalTopDef topDefs
@@ -154,17 +160,18 @@ evalStmt (Ass _ ident expr) = do
   value <- evalExpr expr
   updateVarStore ident value
 evalStmt (Incr _ ident) = do
-  (varStore, _) <- get
-  case Map.lookup ident varStore of
+  (varStore, _, scope) <- get
+  case Map.lookup (scope, ident) varStore of
     Just (IntVal value) -> updateVarStore ident (IntVal (value + 1))
-    Nothing -> throwError "No such variable!"
+    Nothing -> throwError ("Variable " ++ show ident ++ " not in scope")
     _ -> throwError "Error: Increment operation only applies to integer variables"
 evalStmt (Decr _ ident) = do
-  (varStore, _) <- get
-  case Map.lookup ident varStore of
+  (varStore, _, scope) <- get
+  case Map.lookup (scope, ident) varStore of
     Just (IntVal value) -> updateVarStore ident (IntVal (value - 1))
-    Nothing -> throwError "No such variable!"
-    _ -> throwError "Error: Increment operation only applies to integer variables"
+    Nothing -> throwError ("Variable " ++ show ident ++ " not in scope")
+    _ -> throwError "Error: Decrement operation only applies to integer variables"
+  return ()
 evalStmt (Ret _ expr) = do
   value <- evalExpr expr
   setReturnValue value
@@ -185,15 +192,16 @@ evalItem t (Init _ ident expr) = do
 
 evalExpr :: Expr -> Eval Value
 evalExpr (EVar _ ident) = do
-  (varEnv, _) <- ask
-  case Map.lookup ident varEnv of
-    Just val -> return val
-    Nothing -> throwError ("Variable " ++ show ident ++ " not found")
+  (varStore, _, scope) <- get
+  case Map.lookup (scope, ident) varStore of
+    Just value -> return value
+    Nothing -> throwError ("Variable " ++ show ident ++ " not in scope")
 evalExpr (ELitInt _ v) = return $ IntVal v
 evalExpr (ELitTrue _) = return $ BoolVal True
 evalExpr (ELitFalse _) = return $ BoolVal False
 evalExpr (EApp _ ident exprs) = do
   (varEnv, funEnv) <- ask
+  setScope ident
   case Map.lookup ident funEnv of
     Just (Function f) -> f exprs
     Nothing -> throwError ("Function " ++ show ident ++ " not found")
@@ -256,7 +264,7 @@ evalExprs exprs = mapM evalExpr exprs
 interpret :: String -> IO ()
 interpret input = case parsedTokens of
   Right tree -> do
-    result <- runEval (Map.empty, initialState) (Map.empty, Map.empty) (evalProgram tree)
+    result <- runEval (Map.empty, initialState, initialScope) (Map.empty, Map.empty) (evalProgram tree)
     case result of
       Left err -> do
         putStrLn ("Eval error: " ++ err)
@@ -269,6 +277,7 @@ interpret input = case parsedTokens of
     exitFailure
   where
     initialState = IntVal 0
+    initialScope = Ident "global"
     tokens = myLexer input
     parsedTokens = pProgram tokens
 
