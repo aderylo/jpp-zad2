@@ -28,7 +28,11 @@ NoInit.    Item ::= Ident ;
 
 Init.      Item ::= Ident "=" Expr ;
 
-ArrInit.   Item ::= Ident "=" "new" Type "[" Expr "]" ;
+ArrInit.   Item ::= Ident "=" "new" Type Dim;
+
+ArrDim.    Dim ::= "[" Expr "]" Dim ; 
+
+ArrDims.   Dim ::= "[" Expr "]" ;
 
 separator nonempty Item "," ;
 
