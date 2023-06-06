@@ -28,15 +28,9 @@ NoInit.    Item ::= Ident ;
 
 Init.      Item ::= Ident "=" Expr ;
 
+ArrInit.   Item ::= Ident "=" "new" Type "[" Expr "]" ;
+
 separator nonempty Item "," ;
-
-ArrDecl.   Stmt ::= Type [ArrItem] ";" ;
-
-NoInitArr. ArrItem ::= Ident ;
-
-InitArr.   ArrItem ::= Ident "=" "new" Type "[" Expr "]" ;
-
-separator nonempty ArrItem "," ;
 
 Ass.       Stmt ::= Ident "=" Expr  ";" ;
 
