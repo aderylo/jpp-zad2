@@ -39,6 +39,7 @@ data Stmt' a
     = Empty a
     | BStmt a (Block' a)
     | Decl a (Type' a) [Item' a]
+    | ArrDecl a (ArrType' a) [Item' a]
     | Ass a Ident (Expr' a)
     | Incr a Ident
     | Decr a Ident
@@ -133,6 +134,7 @@ instance HasPosition Stmt where
     Empty p -> p
     BStmt p _ -> p
     Decl p _ _ -> p
+    ArrDecl p _ _ -> p
     Ass p _ _ -> p
     Incr p _ -> p
     Decr p _ -> p

@@ -24,6 +24,8 @@ BStmt.     Stmt ::= Block ;
 
 Decl.      Stmt ::= Type [Item] ";" ;
 
+ArrDecl.   Stmt ::= ArrType [Item] ";" ;
+
 NoInit.    Item ::= Ident ; 
 
 Init.      Item ::= Ident "=" Expr ;

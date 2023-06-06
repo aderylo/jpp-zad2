@@ -114,28 +114,7 @@ startEnv =
           _ -> throwError "Type error"
         return VoidVal
 
-evalArgDeclaration :: (Arg, Expr) -> Eval (Ident, Value)
-evalArgDeclaration (Arg _ t ident, expr) = do
-  value <- evalExpr expr
-  return (ident, value)
-
-changeEnvScope :: Ident -> Eval Env
-changeEnvScope ident = do
-  (vEnv, fEnv, _) <- ask
-  return (vEnv, fEnv, ident)
-
-populateStoreWithArgsValues :: Scope -> [(Ident, Value)] -> Eval ()
-populateStoreWithArgsValues scope [] = return ()
-populateStoreWithArgsValues scope (arg : rest) = do
-  (varStore, returnStore) <- get
-  put (Map.insert (scope, fst arg) (snd arg) varStore, returnStore)
-  populateStoreWithArgsValues scope rest
-
-cleanUpAfterFunctionCall :: Scope -> Eval ()
-cleanUpAfterFunctionCall scope = do
-  (varStore, returnStore) <- get
-  let newVarStore = Map.filterWithKey (\(s, _) _ -> s /= scope) varStore
-  put (newVarStore, returnStore)
+-- Top layer definitions --------------------------------------------------------
 
 evalTopDef :: TopDef -> Eval Env
 evalTopDef (FnDef _ t fName args block) = do
@@ -160,18 +139,32 @@ evalTopDefs (topDef : rest) = do
   newEnv <- evalTopDef topDef
   local (const newEnv) (evalTopDefs rest)
 
-evalBlock :: Block -> Eval ()
-evalBlock (Block _ stmts) = evalStmts stmts
-  where
-    evalStmts [] = return () -- No more statements to evaluate
-    evalStmts (stmt : rest) = do
-      evalStmt stmt
-      checkForReturn stmt rest
+-- evalTopDef helper functions -------------------------------------------------
 
-    checkForReturn :: Stmt -> [Stmt] -> Eval ()
-    checkForReturn (Ret _ _) _ = return () -- Stop evaluating after encountering a `Ret` statement
-    checkForReturn _ [] = return () -- Stop evaluating at the end of the statement list
-    checkForReturn _ (stmt : rest) = evalStmt stmt >> checkForReturn stmt rest -- Continue evaluating
+evalArgDeclaration :: (Arg, Expr) -> Eval (Ident, Value)
+evalArgDeclaration (Arg _ t ident, expr) = do
+  value <- evalExpr expr
+  return (ident, value)
+
+changeEnvScope :: Ident -> Eval Env
+changeEnvScope ident = do
+  (vEnv, fEnv, _) <- ask
+  return (vEnv, fEnv, ident)
+
+populateStoreWithArgsValues :: Scope -> [(Ident, Value)] -> Eval ()
+populateStoreWithArgsValues scope [] = return ()
+populateStoreWithArgsValues scope (arg : rest) = do
+  (varStore, returnStore) <- get
+  put (Map.insert (scope, fst arg) (snd arg) varStore, returnStore)
+  populateStoreWithArgsValues scope rest
+
+cleanUpAfterFunctionCall :: Scope -> Eval ()
+cleanUpAfterFunctionCall scope = do
+  (varStore, returnStore) <- get
+  let newVarStore = Map.filterWithKey (\(s, _) _ -> s /= scope) varStore
+  put (newVarStore, returnStore)
+
+-- Statements ------------------------------------------------------------------
 
 evalStmt :: Stmt -> Eval ()
 evalStmt (Empty _) = return ()
@@ -205,6 +198,9 @@ evalStmt (Break _) = do
   return ()
 evalStmt (Decl _ t items) = do
   mapM_ (evalItem t) items
+evalStmt (ArrDecl _ t items) = do
+  throwError "Not implemented"
+  return ()
 evalStmt (Ass _ ident expr) = do
   value <- evalExpr expr
   updateVarStore ident value
@@ -228,6 +224,24 @@ evalStmt (Ret _ expr) = do
   setReturnValue value
 evalStmt (VRet _) = do
   setReturnValue VoidVal
+
+--- helper functions for evalStmt ----------------------------------------------
+
+evalBlock :: Block -> Eval ()
+evalBlock (Block _ stmts) = evalStmts stmts
+  where
+    evalStmts [] = return () -- No more statements to evaluate
+    evalStmts (stmt : rest) = do
+      evalStmt stmt
+      checkForReturn stmt rest
+
+    checkForReturn :: Stmt -> [Stmt] -> Eval ()
+    checkForReturn (Ret _ _) _ = return () -- Stop evaluating after encountering a `Ret` statement
+    checkForReturn _ [] = return () -- Stop evaluating at the end of the statement list
+    checkForReturn _ (stmt : rest) = evalStmt stmt >> checkForReturn stmt rest -- Continue evaluating
+
+
+-- Expressions ------------------------------------------------------------------
 
 evalItem :: Type -> Item -> Eval ()
 evalItem t (NoInit _ ident) = do
@@ -311,6 +325,9 @@ evalExpr (EOr _ expr1 expr2) = do
 
 evalExprs :: [Expr] -> Eval [Value]
 evalExprs exprs = mapM evalExpr exprs
+
+
+-- Entrypoint ------------------------------------------------------------------
 
 interpret :: String -> IO ()
 interpret input = case parsedTokens of
