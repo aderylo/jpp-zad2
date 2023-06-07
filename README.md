@@ -62,7 +62,7 @@ Co więcej, język nie będzie czysto object-oriented, ponieważ zamierzam najp
 
   Na 30 punktów:
   
-  12. (4) (statyczne typowanie) +
+  12. (4) (statyczne typowanie) +/-
   13. (2) (funkcje zagnieżdżone ze statycznym wiązaniem) -
   14. (1/2) (rekordy/listy/tablice/tablice wielowymiarowe) +
   15. (2) (krotki z przypisaniem) -
@@ -73,7 +73,7 @@ Co więcej, język nie będzie czysto object-oriented, ponieważ zamierzam najp
   Moje dodatkowe:
 
   19. (8?) Klasy i obiekty
-  20. (8?) Garbage collection
+  20. (8?) Garbage collection done!
 
 Razem: 27 + 16? 
 
