@@ -92,3 +92,27 @@ ghc Main.hs -outputdir build
 ```
  ./Main ../examples/printing.lat
 ```
+
+# Zrobione feature'y:
+Na 15 punktów: 
+  01. (trzy typy) -> examples/printing.lat
+  02. (literały, arytmetyka, porównania) -> examples/while.lat
+  03. (zmienne, przypisanie) -> examples/core.lat
+  04. (print) + -> examples/printing.lat
+  05. (while, if) -> examples/core.lat
+  06. (funkcje lub procedury, rekurencja) -> examples/core.lat
+  07. (przez zmienną / przez wartość / in/out) -> examples/core.lat
+  08. (zmienne read-only i pętla for) - 
+
+  Na 20 punktów:
+
+  09. (przesłanianie i statyczne wiązanie) -> examples/scope.lat
+  10. (obsługa błędów wykonania) -> examples/errors.lat
+  11. (funkcje zwracające wartość) -> examples/fun.lat
+
+  Na 30 punktów: 
+
+  14. (1/2) (rekordy/listy/tablice/tablice wielowymiarowe) -> examples/arr.lat
+
+  20. Garbage collection -> examples/gc.lat
+
