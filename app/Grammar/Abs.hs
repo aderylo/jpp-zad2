@@ -39,7 +39,6 @@ data Stmt' a
     = Empty a
     | BStmt a (Block' a)
     | Decl a (Type' a) [Item' a]
-    | ArrDecl a (ArrType' a) [Item' a]
     | Ass a Ident (Expr' a)
     | Incr a Ident
     | Decr a Ident
@@ -54,16 +53,24 @@ data Stmt' a
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Functor, C.Foldable, C.Traversable)
 
 type Item = Item' BNFC'Position
-data Item' a = NoInit a Ident | Init a Ident (Expr' a)
+data Item' a
+    = NoInit a Ident
+    | Init a Ident (Expr' a)
+    | ArrInit a Ident (Type' a) (Dim' a)
+  deriving (C.Eq, C.Ord, C.Show, C.Read, C.Functor, C.Foldable, C.Traversable)
+
+type Dim = Dim' BNFC'Position
+data Dim' a = ArrDims a (Expr' a) (Dim' a) | ArrDim a (Expr' a)
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Functor, C.Foldable, C.Traversable)
 
 type Type = Type' BNFC'Position
 data Type' a
-    = Int a | Str a | Bool a | Void a | Fun a (Type' a) [Type' a]
-  deriving (C.Eq, C.Ord, C.Show, C.Read, C.Functor, C.Foldable, C.Traversable)
-
-type ArrType = ArrType' BNFC'Position
-data ArrType' a = Array a (Type' a)
+    = Int a
+    | Str a
+    | Bool a
+    | Void a
+    | Fun a (Type' a) [Type' a]
+    | Array a (Type' a)
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Functor, C.Foldable, C.Traversable)
 
 type Expr = Expr' BNFC'Position
@@ -74,6 +81,7 @@ data Expr' a
     | ELitFalse a
     | EApp a Ident [Expr' a]
     | EString a String
+    | EArrGet a Ident (Dim' a)
     | Neg a (Expr' a)
     | Not a (Expr' a)
     | EMul a (Expr' a) (MulOp' a) (Expr' a)
@@ -134,7 +142,6 @@ instance HasPosition Stmt where
     Empty p -> p
     BStmt p _ -> p
     Decl p _ _ -> p
-    ArrDecl p _ _ -> p
     Ass p _ _ -> p
     Incr p _ -> p
     Decr p _ -> p
@@ -151,6 +158,12 @@ instance HasPosition Item where
   hasPosition = \case
     NoInit p _ -> p
     Init p _ _ -> p
+    ArrInit p _ _ _ -> p
+
+instance HasPosition Dim where
+  hasPosition = \case
+    ArrDims p _ _ -> p
+    ArrDim p _ -> p
 
 instance HasPosition Type where
   hasPosition = \case
@@ -159,9 +172,6 @@ instance HasPosition Type where
     Bool p -> p
     Void p -> p
     Fun p _ _ -> p
-
-instance HasPosition ArrType where
-  hasPosition = \case
     Array p _ -> p
 
 instance HasPosition Expr where
@@ -172,6 +182,7 @@ instance HasPosition Expr where
     ELitFalse p -> p
     EApp p _ _ -> p
     EString p _ -> p
+    EArrGet p _ _ -> p
     Neg p _ -> p
     Not p _ -> p
     EMul p _ _ _ -> p

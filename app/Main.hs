@@ -24,6 +24,7 @@ data Value
   | IntVal Integer
   | BoolVal Bool
   | StringVal String
+  | ArrayVal [Value]
   deriving (Show)
 
 newtype Function = Function ([Expr] -> Eval Value)
@@ -198,9 +199,6 @@ evalStmt (Break _) = do
   return ()
 evalStmt (Decl _ t items) = do
   mapM_ (evalItem t) items
-evalStmt (ArrDecl _ t items) = do
-  throwError "Not implemented"
-  return ()
 evalStmt (Ass _ ident expr) = do
   value <- evalExpr expr
   updateVarStore ident value
@@ -250,10 +248,80 @@ evalItem t (NoInit _ ident) = do
     Bool _ -> updateVarStore ident (BoolVal False)
     Str _ -> updateVarStore ident (StringVal "")
     Void _ -> updateVarStore ident VoidVal
+    Array _ _ -> updateVarStore ident (ArrayVal [])
     _ -> throwError "Type error"
 evalItem t (Init _ ident expr) = do
   value <- evalExpr expr
   updateVarStore ident value
+evalItem t (ArrInit _ ident t' dims) = do
+  let array = arrayConstructor dims
+  updateVarStore ident array
+
+arrayConstructor :: Dim -> Value
+arrayConstructor dim = do
+  case dim of
+    ArrDim _ expr -> do
+      case expr of
+        ELitInt _ v -> ArrayVal (replicate (fromInteger v) (IntVal 0))
+    ArrDims _ expr dim' -> do
+      case expr of
+        ELitInt _ v -> ArrayVal (replicate (fromInteger v) (arrayConstructor dim'))
+
+-- get array from store
+-- and go down the dimensions
+
+
+
+-- evalExpr (EArrGet _ ident dim) = do
+--   return $ IntVal 0
+
+--   where
+--     array :: Eval [Value]
+--     array = do
+--       (_, _, scope) <- ask
+--       (varStore, _) <- get
+--       case Map.lookup (scope, ident) varStore of
+--         Just (ArrayVal arr) -> return arr
+--         Nothing -> throwError ("Variable " ++ show ident ++ " not in scope")
+--         _ -> throwError "Type error"
+--     getElem :: Eval Value -> Dim -> Eval [Value]
+--     getElem arr dim = do
+--       case dim of
+--         ArrDim _ expr -> do
+--           case expr of
+--             ELitInt _ v -> do
+--               return arr !! fromInteger v
+--         ArrDims _ expr dim' -> do
+--           case expr of
+--             ELitInt _ v -> do
+--               getElem (arr !! (fromInteger v)) dim'
+
+getArrElem :: Ident -> Dim -> Eval Value
+getArrElem ident dim = do
+  (_, _, scope) <- ask
+  (varStore, _) <- get
+  case Map.lookup (scope, ident) varStore of
+    Nothing -> throwError ("Variable " ++ show ident ++ " not in scope")
+    Just value -> do
+      let elem = getElem value dim
+      case elem of
+        Just elem' -> return elem'
+        Nothing -> throwError "Type error"
+
+getElem :: Value -> Dim -> Maybe Value
+getElem (ArrayVal arr) dim = do
+  case dim of
+    ArrDim _ expr -> do
+      case expr of
+        ELitInt _ v -> do
+          return $ arr !! fromInteger v
+    ArrDims _ expr dim' -> do
+      case expr of
+        ELitInt _ v -> do
+          let elem = getElem (arr !! (fromInteger v)) dim'
+          elem
+
+
 
 evalExpr :: Expr -> Eval Value
 evalExpr (EVar _ ident) = do
@@ -271,6 +339,8 @@ evalExpr (EApp _ ident exprs) = do
     Just (Function f) -> f exprs
     Nothing -> throwError ("Function " ++ show ident ++ " not found")
 evalExpr (EString _ str) = return $ StringVal str
+evalExpr (EArrGet _ ident dims) = do
+  getArrElem ident dims
 evalExpr (Neg _ expr) = do
   v <- evalExpr expr
   case v of
