@@ -38,6 +38,8 @@ separator nonempty Item "," ;
 
 Ass.       Stmt ::= Ident "=" Expr  ";" ;
 
+ArrAss.    Stmt ::= Ident Dim "=" Expr; 
+
 Incr.      Stmt ::= Ident "++"  ";" ;
 
 Decr.      Stmt ::= Ident "--"  ";" ;

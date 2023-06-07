@@ -18,6 +18,7 @@ import Language.Haskell.TH (Dec, valD)
 import System.Environment (getArgs)
 import System.Exit (exitFailure, exitSuccess)
 import Prelude
+import Distribution.Compat.Lens ( (&), (.~) )
 
 data Value
   = VoidVal
@@ -202,6 +203,15 @@ evalStmt (Decl _ t items) = do
 evalStmt (Ass _ ident expr) = do
   value <- evalExpr expr
   updateVarStore ident value
+evalStmt (ArrAss _ ident dim expr) = do
+  newValue <- evalExpr expr
+  (_, _, scope) <- ask
+  (varStore, _) <- get
+  case Map.lookup (scope, ident) varStore of
+    Nothing -> throwError ("Variable " ++ show ident ++ " not in scope")
+    Just oldArr -> do
+      let newArr = arrModify oldArr dim newValue
+      updateVarStore ident newArr
 evalStmt (Incr _ ident) = do
   (_, _, scope) <- ask
   (varStore, _) <- get
@@ -222,6 +232,19 @@ evalStmt (Ret _ expr) = do
   setReturnValue value
 evalStmt (VRet _) = do
   setReturnValue VoidVal
+
+arrModify :: Value -> Dim -> Value -> Value
+arrModify arr (ArrDim _ expr) v = do
+  case (expr, arr) of
+    (ELitInt _ i, ArrayVal arr') -> do
+      let n = fromInteger i
+      ArrayVal $ take n arr' ++ [v] ++ drop (n + 1) arr'
+
+arrModify arr (ArrDims _ expr dim) v = do
+  case (expr, arr) of
+    (ELitInt _ i, ArrayVal arr') -> do
+      let n = fromInteger i
+      ArrayVal $ take n arr' ++ [arrModify arr dim v] ++ drop (n + 1) arr'
 
 --- helper functions for evalStmt ----------------------------------------------
 
@@ -287,11 +310,13 @@ getElem (ArrayVal arr) dim = do
       case expr of
         ELitInt _ v -> do
           return $ arr !! fromInteger v
+        _ -> Nothing
     ArrDims _ expr dim' -> do
       case expr of
         ELitInt _ v -> do
           let elem = getElem (arr !! fromInteger v) dim'
           elem
+        _ -> Nothing
 
 evalExpr :: Expr -> Eval Value
 evalExpr (EVar _ ident) = do
