@@ -267,34 +267,6 @@ arrayConstructor dim = do
       case expr of
         ELitInt _ v -> ArrayVal (replicate (fromInteger v) (arrayConstructor dim'))
 
--- get array from store
--- and go down the dimensions
-
-
-
--- evalExpr (EArrGet _ ident dim) = do
---   return $ IntVal 0
-
---   where
---     array :: Eval [Value]
---     array = do
---       (_, _, scope) <- ask
---       (varStore, _) <- get
---       case Map.lookup (scope, ident) varStore of
---         Just (ArrayVal arr) -> return arr
---         Nothing -> throwError ("Variable " ++ show ident ++ " not in scope")
---         _ -> throwError "Type error"
---     getElem :: Eval Value -> Dim -> Eval [Value]
---     getElem arr dim = do
---       case dim of
---         ArrDim _ expr -> do
---           case expr of
---             ELitInt _ v -> do
---               return arr !! fromInteger v
---         ArrDims _ expr dim' -> do
---           case expr of
---             ELitInt _ v -> do
---               getElem (arr !! (fromInteger v)) dim'
 
 getArrElem :: Ident -> Dim -> Eval Value
 getArrElem ident dim = do
@@ -318,10 +290,8 @@ getElem (ArrayVal arr) dim = do
     ArrDims _ expr dim' -> do
       case expr of
         ELitInt _ v -> do
-          let elem = getElem (arr !! (fromInteger v)) dim'
+          let elem = getElem (arr !! fromInteger v) dim'
           elem
-
-
 
 evalExpr :: Expr -> Eval Value
 evalExpr (EVar _ ident) = do

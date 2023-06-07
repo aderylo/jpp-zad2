@@ -30,9 +30,9 @@ Init.      Item ::= Ident "=" Expr ;
 
 ArrInit.   Item ::= Ident "=" "new" Type Dim;
 
-ArrDim.    Dim ::= "[" Expr "]" Dim ; 
+ArrDims.    Dim ::= "[" Expr "]" Dim ; 
 
-ArrDims.   Dim ::= "[" Expr "]" ;
+ArrDim.     Dim ::= "[" Expr "]" ;
 
 separator nonempty Item "," ;
 
@@ -88,7 +88,7 @@ EApp.      Expr6 ::= Ident "(" [Expr] ")" ;
 
 EString.   Expr6 ::= String ;
 
-EArr.      Expr6 ::= "[" Expr "]" ;
+EArrGet.   Expr6 ::= Ident Dim ;
 
 Neg.       Expr5 ::= "-" Expr6 ;
 
